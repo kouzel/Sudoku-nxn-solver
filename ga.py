@@ -48,7 +48,7 @@ class Individual:
                 for r in range(boxSize):
                     for c in range(boxSize):
                         vals.append(self.board[boxRow+r][boxCol+c])
-                conflicts += (len(vals) - len(set(vals)))
+                conflicts += (len(vals) - len(set(vals))) 
 
         self.fitness = -conflicts 
 
@@ -57,20 +57,47 @@ def selection(population: list[Individual],k:int):
     participants = random.sample(population,k)
     return max(participants,key=lambda x:x.fitness)
 
-def crossover(parent1,parent2,child1,child2):
+def crossoverByRow(parent1,parent2,child1,child2):
     cut = random.randint(0,Individual.size-1)
 
-    child1.board=parent1.board[:cut]+parent2.board[cut:]
-    child2.board=parent2.board[:cut]+parent1.board[cut:]
+    child1.board=copy.deepcopy(parent1.board[:cut]+parent2.board[cut:])
+    child2.board=copy.deepcopy(parent2.board[:cut]+parent1.board[cut:])
+
+def crossoverByColumn(parent1,parent2,child1,child2):
+    cut = random.randint(0,Individual.size-1)
+    newBoard1 =[ [] for _ in range(Individual.size)]
+    newBoard2 =[ [] for _ in range(Individual.size)]
+
+    for row in range(Individual.size):
+        for column in range(Individual.size):
+            if column< cut:
+                newBoard1[row].append(parent1.board[row][column])
+                newBoard2[row].append(parent2.board[row][column])
+            else:
+                newBoard1[row].append(parent2.board[row][column])
+                newBoard2[row].append(parent1.board[row][column])
+    child1.board=newBoard1
+    child2.board=newBoard2
+
 
 def mutation(child:Individual,p:float,initialBoard):
-    row = random.randint(0,Individual.size-1)
-    mutable = [i for i in range(Individual.size) if initialBoard[row][i]==0]
+    if(random.random() > p):
+         return
+    
+    if random.random() <0.5:
+        for row in range(Individual.size):
+            mutable = [i for i in range(Individual.size) if initialBoard[row][i]==0 ]
 
-    if(len(mutable)>=2 and random.random()<p):
-        a,b=random.sample(mutable,2)
-        child.board[row][a],child.board[row][b]=child.board[row][b],child.board[row][a]
+            if(len(mutable)>=2):
+                a,b=random.sample(mutable,2)
+                child.board[row][a],child.board[row][b]=child.board[row][b],child.board[row][a]
 
+    else:
+        for col in range(Individual.size):
+            mutable = [i for i in range(Individual.size) if initialBoard[i][col] == 0]
+            if(len(mutable)>=2):
+                a,b=random.sample(mutable,2)
+                child.board[a][col],child.board[b][col]=child.board[b][col],child.board[a][col]
 
 def ga(initialBoard,populationSize,numGenerations,tournamentSize,mutationProbability,elitismSize):
 
@@ -89,7 +116,7 @@ def ga(initialBoard,populationSize,numGenerations,tournamentSize,mutationProbabi
         if(bestResult.fitness == Individual.bestFitness):
             break
 
-        print(f"Best Fitness:{population[0].fitness}; Worst Fitness:{population[-1].fitness}; Generation: {it}", end="\r")
+        print(f"Best Fitness:{population[0].fitness}; Fifth:{population[4].fitness}; Worst Fitness:{population[-1].fitness}; Generation: {it}; mutProb:{mutationProbability + it/numGenerations}", end="\r")
         
         newPopulation[:elitismSize] = population[:elitismSize]
 
@@ -101,9 +128,13 @@ def ga(initialBoard,populationSize,numGenerations,tournamentSize,mutationProbabi
             parent2= selection(population,tournamentSize)
 
             parent1.fitness=tmp
-            crossover(parent1,parent2,newPopulation[i],newPopulation[i+1])
+            if(random.random() < 0.5):
+                crossoverByRow(parent1,parent2,newPopulation[i],newPopulation[i+1])
+            else:
+                crossoverByColumn(parent1,parent2,newPopulation[i],newPopulation[i+1])
+
             mutation(newPopulation[i],mutationProbability,initialBoard)
-            mutation(newPopulation[i+1],mutationProbability,initialBoard)
+            mutation(newPopulation[i+1],mutationProbability ,initialBoard)
 
             newPopulation[i].calculateFitness()
             newPopulation[i+1].calculateFitness()
@@ -114,6 +145,21 @@ def ga(initialBoard,populationSize,numGenerations,tournamentSize,mutationProbabi
 
 
     return bestResult
+
+
+enigmatikaExtreme = [
+    [0,7,0, 0,1,0, 0,0,0],
+    [0,8,0, 0,0,2, 0,0,0],
+    [0,9,0, 0,0,8, 0,1,5],
+
+    [0,0,0, 0,5,6, 7,0,0],
+    [6,0,0, 8,0,3, 0,0,4],
+    [0,0,1, 9,4,0, 0,0,0],
+
+    [9,2,0, 3,0,0, 0,4,0],
+    [0,0,0, 4,0,0, 0,3,0],
+    [0,0,0, 0,8,0, 0,5,0]
+]
 
 evilSudoku = [
     [5,3,0, 0,7,0, 0,0,0],
@@ -165,16 +211,9 @@ sudoku2x2 = [
 
 Individual.size=9
 
-printSudoku(solvedSudoku)
-result = ga(solvedSudoku,populationSize=2000,numGenerations=10000,tournamentSize=3,mutationProbability=0.9,elitismSize=5)
+printSudoku(easySudoku)
+result = ga(easySudoku,populationSize=5000,numGenerations=1000,tournamentSize=6,mutationProbability=0.3,elitismSize=50)
 
-print('Best')
+print('\n\n')
+print('Best: '+str(result.fitness))
 printSudoku(result.board)
-# Individual.size=4
-# printSudoku(puzzle2x2)
-# print()
-# result = ga(puzzle2x2,populationSize=2000,numGenerations=10000,tournamentSize=3,mutationProbability=0.9,elitismSize=10)
-
-# print()
-# printSudoku(result.board)
-# print(result.fitness)
