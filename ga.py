@@ -1,14 +1,14 @@
 import copy
 import random
 import math
-
+import time
 def printSudoku(board):
     N = len(board)
     n = int(math.sqrt(Individual.size)) 
 
     for i in range(N):
         if i % n == 0 and i != 0:
-            print("----------------------------") 
+            print("----------------------") 
         row= ""
         for j in range(N):
             if j % n == 0 and j != 0:
@@ -37,6 +37,9 @@ class Individual:
         N = Individual.size
         boxSize = int(math.sqrt(N))
         conflicts = 0
+        # for row in range(N):
+        #     vals= [self.board[row][col] for col in range(N)]
+        #     conflicts+= (len(vals) - len(set(vals)))
 
         for col in range(N):
             vals = [self.board[row][col] for row in range(N)]
@@ -78,6 +81,35 @@ def crossoverByColumn(parent1,parent2,child1,child2):
                 newBoard2[row].append(parent1.board[row][column])
     child1.board=newBoard1
     child2.board=newBoard2
+def crossoverByBlock(parent1, parent2, child1, child2):
+    N = Individual.size
+    boxSize = int(math.sqrt(N))
+
+    # napravimo prazne table za decu
+    newBoard1 = [[0]*N for _ in range(N)]
+    newBoard2 = [[0]*N for _ in range(N)]
+
+    # biramo mesto preseka po blokovima
+    cutRow = random.randint(0, boxSize-1)   # koji blok po redovima
+    cutCol = random.randint(0, boxSize-1)   # koji blok po kolonama
+
+    for br in range(boxSize):
+        for bc in range(boxSize):
+            for r in range(boxSize):
+                for c in range(boxSize):
+                    row = br*boxSize + r
+                    col = bc*boxSize + c
+
+                    # ako je blok presek – dete1 dobija iz parent1, dete2 iz parent2
+                    if br < cutRow or (br == cutRow and bc <= cutCol):
+                        newBoard1[row][col] = parent1.board[row][col]
+                        newBoard2[row][col] = parent2.board[row][col]
+                    else:
+                        newBoard1[row][col] = parent2.board[row][col]
+                        newBoard2[row][col] = parent1.board[row][col]
+
+    child1.board = newBoard1
+    child2.board = newBoard2
 
 
 def mutation(child:Individual,p:float,initialBoard):
@@ -114,9 +146,10 @@ def ga(initialBoard,populationSize,numGenerations,tournamentSize,mutationProbabi
         bestResult=population[0]
 
         if(bestResult.fitness == Individual.bestFitness):
+            
             break
 
-        print(f"Best Fitness:{population[0].fitness}; Fifth:{population[4].fitness}; Worst Fitness:{population[-1].fitness}; Generation: {it}; mutProb:{mutationProbability + it/numGenerations}", end="\r")
+        print(f"Best Fitness:{population[0].fitness}; Fifth:{population[4].fitness}; Worst Fitness:{population[-1].fitness}; Generation: {it}; mutProb:{mutationProbability}", end="\r")
         
         newPopulation[:elitismSize] = population[:elitismSize]
 
@@ -128,7 +161,10 @@ def ga(initialBoard,populationSize,numGenerations,tournamentSize,mutationProbabi
             parent2= selection(population,tournamentSize)
 
             parent1.fitness=tmp
-            if(random.random() < 0.5):
+            randCrossover=random.random()
+            if(randCrossover<0.33):
+                crossoverByBlock(parent1,parent2,newPopulation[i],newPopulation[i+1])
+            elif randCrossover>0.66:
                 crossoverByRow(parent1,parent2,newPopulation[i],newPopulation[i+1])
             else:
                 crossoverByColumn(parent1,parent2,newPopulation[i],newPopulation[i+1])
@@ -208,12 +244,18 @@ sudoku2x2 = [
     [0, 3, 0, 0],
     [2, 0, 0, 1]
 ]
+sudokuToSolve = enigmatikaExtreme
 
-Individual.size=9
+Individual.size=len(sudokuToSolve)
+
+start = time.perf_counter()
+random.seed(3)
 
 printSudoku(easySudoku)
-result = ga(easySudoku,populationSize=5000,numGenerations=1000,tournamentSize=6,mutationProbability=0.3,elitismSize=50)
+result = ga(easySudoku,populationSize=2000,numGenerations=10000,tournamentSize=5,mutationProbability=0.6,elitismSize=50)
+end = time.perf_counter()
 
 print('\n\n')
 print('Best: '+str(result.fitness))
 printSudoku(result.board)
+print(str(end-start))
