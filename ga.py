@@ -11,6 +11,9 @@ from utils import (
     enigmatikaExtreme,
     worldsMostDificult,
 )
+from simulatedAnneling import (
+    simulatedAnnealingImprove
+)
 
 
 class Individual:
@@ -19,37 +22,40 @@ class Individual:
     initialPositions = []
 
     def __init__(self, initialBoard):
+        N = Individual.size
+        boxSize = int(math.sqrt(N))
         newBoard = copy.deepcopy(initialBoard)
-        for row in range(Individual.size):
-            missing = [
-                n for n in range(1, Individual.size + 1) if n not in newBoard[row]
-            ]
-            random.shuffle(missing)
-            for col in range(Individual.size):
-                if newBoard[row][col] == 0:
-                    newBoard[row][col] = missing.pop()
+
+        for boxRow in range(0, N, boxSize):
+            for boxCol in range(0, N, boxSize):
+
+                fixed_nums = set()
+                for r in range(boxSize):
+                    for c in range(boxSize):
+                        if newBoard[boxRow + r][boxCol + c] != 0:
+                            fixed_nums.add(newBoard[boxRow + r][boxCol + c])
+
+                missing = [n for n in range(1, N + 1) if n not in fixed_nums]
+                random.shuffle(missing)
+
+                for r in range(boxSize):
+                    for c in range(boxSize):
+                        if newBoard[boxRow + r][boxCol + c] == 0:
+                            newBoard[boxRow + r][boxCol + c] = missing.pop()
+
         self.board = newBoard
         self.calculateFitness()
 
     def calculateFitness(self):
         N = Individual.size
-        boxSize = int(math.sqrt(N))
         conflicts = 0
-        # for row in range(N):
-        #     vals= [self.board[row][col] for col in range(N)]
-        #     conflicts+= (len(vals) - len(set(vals)))
+        for row in range(N):
+            vals = [self.board[row][col] for col in range(N)]
+            conflicts += len(vals) - len(set(vals))
 
         for col in range(N):
             vals = [self.board[row][col] for row in range(N)]
             conflicts += len(vals) - len(set(vals))
-
-        for boxRow in range(0, N, boxSize):
-            for boxCol in range(0, N, boxSize):
-                vals = []
-                for r in range(boxSize):
-                    for c in range(boxSize):
-                        vals.append(self.board[boxRow + r][boxCol + c])
-                conflicts += len(vals) - len(set(vals))
 
         self.fitness = -conflicts
 
@@ -58,6 +64,23 @@ def selection(population: list[Individual], k: int):
     k = min(len(population), k)
     participants = random.sample(population, k)
     return max(participants, key=lambda x: x.fitness)
+
+
+def crossoverByCell(parent1, parent2, child1, child2):
+    cut = random.randint(0, Individual.size * Individual.size - 1)
+    newBoard1 = [[] for _ in range(Individual.size)]
+    newBoard2 = [[] for _ in range(Individual.size)]
+
+    for row in range(Individual.size):
+        for column in range(Individual.size):
+            if row * Individual.size + column < cut:
+                newBoard1[row].append(parent1.board[row][column])
+                newBoard2[row].append(parent2.board[row][column])
+            else:
+                newBoard1[row].append(parent2.board[row][column])
+                newBoard2[row].append(parent1.board[row][column])
+    child1.board = newBoard1
+    child2.board = newBoard2
 
 
 def crossoverByRow(parent1, parent2, child1, child2):
@@ -88,28 +111,22 @@ def crossoverByBlock(parent1, parent2, child1, child2):
     N = Individual.size
     boxSize = int(math.sqrt(N))
 
-    # napravimo prazne table za decu
-    newBoard1 = [[0] * N for _ in range(N)]
-    newBoard2 = [[0] * N for _ in range(N)]
+    newBoard1 = copy.deepcopy(parent1.board)
+    newBoard2 = copy.deepcopy(parent2.board)
 
-    # biramo mesto preseka po blokovima
-    cutRow = random.randint(0, boxSize - 1)  # koji blok po redovima
-    cutCol = random.randint(0, boxSize - 1)  # koji blok po kolonama
+    block_index = random.randint(0, N - 1)
+    box_row_start = (block_index // boxSize) * boxSize
+    box_col_start = (block_index % boxSize) * boxSize
 
-    for br in range(boxSize):
-        for bc in range(boxSize):
-            for r in range(boxSize):
-                for c in range(boxSize):
-                    row = br * boxSize + r
-                    col = bc * boxSize + c
+    for r in range(boxSize):
+        for c in range(boxSize):
+            row = box_row_start + r
+            col = box_col_start + c
 
-                    # ako je blok presek – dete1 dobija iz parent1, dete2 iz parent2
-                    if br < cutRow or (br == cutRow and bc <= cutCol):
-                        newBoard1[row][col] = parent1.board[row][col]
-                        newBoard2[row][col] = parent2.board[row][col]
-                    else:
-                        newBoard1[row][col] = parent2.board[row][col]
-                        newBoard2[row][col] = parent1.board[row][col]
+            newBoard1[row][col], newBoard2[row][col] = (
+                newBoard2[row][col],
+                newBoard1[row][col],
+            )
 
     child1.board = newBoard1
     child2.board = newBoard2
@@ -119,26 +136,31 @@ def mutation(child: Individual, p: float, initialBoard):
     if random.random() > p:
         return
 
-    if random.random() < 0.5:
-        for row in range(Individual.size):
-            mutable = [i for i in range(Individual.size) if initialBoard[row][i] == 0]
+    N = Individual.size
+    boxSize = int(math.sqrt(N))
 
-            if len(mutable) >= 2:
-                a, b = random.sample(mutable, 2)
-                child.board[row][a], child.board[row][b] = (
-                    child.board[row][b],
-                    child.board[row][a],
-                )
+    block_index = random.randint(0, N - 1)
+    box_row_start = (block_index // boxSize) * boxSize
+    box_col_start = (block_index % boxSize) * boxSize
 
-    else:
-        for col in range(Individual.size):
-            mutable = [i for i in range(Individual.size) if initialBoard[i][col] == 0]
-            if len(mutable) >= 2:
-                a, b = random.sample(mutable, 2)
-                child.board[a][col], child.board[b][col] = (
-                    child.board[b][col],
-                    child.board[a][col],
-                )
+    mutableCells = []
+
+    for rOffset in range(boxSize):
+        for cOffset in range(boxSize):
+            row = box_row_start + rOffset
+            col = box_col_start + cOffset
+
+            if initialBoard[row][col] == 0:
+                mutableCells.append((row, col))
+
+    for _ in range(5): 
+        if len(mutableCells) >= 2:
+            (r1, c1), (r2, c2) = random.sample(mutableCells, 2)
+
+            child.board[r1][c1], child.board[r2][c2] = (
+                child.board[r2][c2],
+                child.board[r1][c1],
+            )
 
 
 def ga(
@@ -149,15 +171,13 @@ def ga(
     mutationProbability,
     elitismSize,
     restartAfterNGenerationWithoutImprovment,
-    randomSeed,
 ):
 
     population = [Individual(initialBoard) for _ in range(populationSize)]
     newPopulation = [Individual(initialBoard) for _ in range(populationSize)]
 
     sameNumOfIterationWithoutImprovment = 0
-    random.seed(randomSeed)
-    bestCurrentFitness = 100
+    bestCurrentFitness = float("-inf")
 
     bestResult = []
     if elitismSize % 2 != populationSize % 2:
@@ -172,29 +192,33 @@ def ga(
         else:
             bestCurrentFitness = population[0].fitness
             sameNumOfIterationWithoutImprovment = 0
+        if sameNumOfIterationWithoutImprovment == restartAfterNGenerationWithoutImprovment:
+            print(f"\n\nTrying simulated annealing before restart (Gen {it})\n")
+            bestBefore = population[0].fitness
 
-        if (
-            sameNumOfIterationWithoutImprovment
-            == restartAfterNGenerationWithoutImprovment
-        ):
-            print("\n\n")
-            print("Restarting algoritham\n")
-            result = ga(
-                initialBoard,
-                populationSize,
-                numGenerations,
-                tournamentSize,
-                mutationProbability,
-                elitismSize,
-                restartAfterNGenerationWithoutImprovment,
-                randomSeed + 1,
-            )
-            return result
+            improved = simulatedAnnealingImprove(population[0], initialBoard)
+            improved.calculateFitness()
+
+            if improved.fitness > bestBefore:
+                print(f"Improved fitness from {bestBefore} -> {improved.fitness} with SA!\n")
+                population[0] = improved
+                bestCurrentFitness = improved.fitness
+                sameNumOfIterationWithoutImprovment = 0
+                continue
+            else:
+                print(f"No improvement with SA. Restarting population at Generation {it}\n")
+                printSudoku(population[0].board)
+                population = population[:elitismSize] + [
+                    Individual(initialBoard) for _ in range(populationSize - elitismSize)
+                ]
+                sameNumOfIterationWithoutImprovment = 0
+                bestCurrentFitness = population[0].fitness
+                continue
 
         if bestResult.fitness == Individual.bestFitness:
-            break
+            return bestResult
         print(
-            f"Best Fitness:{population[0].fitness}; Fifth:{population[4].fitness}; Worst Fitness:{population[-1].fitness}; Generation: {it}; mutProb:{mutationProbability}",
+            f"Best Fitness:{population[0].fitness}; 11th:{population[10].fitness}; Worst Fitness:{population[-1].fitness}; Generation: {it};",
             end="\r",
         )
 
@@ -208,22 +232,19 @@ def ga(
             parent2 = selection(population, tournamentSize)
 
             parent1.fitness = tmp
-            # crossoverByBlock(parent1, parent2, newPopulation[i], newPopulation[i + 1])
 
-            randCrossover = random.random()
-            if randCrossover < 0.33:
-                crossoverByBlock(
-                    parent1, parent2, newPopulation[i], newPopulation[i + 1]
-                )
-            elif randCrossover > 0.66:
-                crossoverByRow(parent1, parent2, newPopulation[i], newPopulation[i + 1])
-            else:
-                crossoverByColumn(
-                    parent1, parent2, newPopulation[i], newPopulation[i + 1]
-                )
+            crossoverByBlock(parent1, parent2, newPopulation[i], newPopulation[i + 1])
 
-            mutation(newPopulation[i], mutationProbability, initialBoard)
-            mutation(newPopulation[i + 1], mutationProbability, initialBoard)
+            mutation(
+                newPopulation[i],
+                mutationProbability,
+                initialBoard,
+            )
+            mutation(
+                newPopulation[i + 1],
+                mutationProbability,
+                initialBoard,
+            )
 
             newPopulation[i].calculateFitness()
             newPopulation[i + 1].calculateFitness()
@@ -235,22 +256,21 @@ def ga(
     return bestResult
 
 
-sudokuToSolve = worldsMostDificult
+sudokuToSolve = easySudoku
 
 Individual.size = len(sudokuToSolve)
 
 start = time.perf_counter()
 
-printSudoku(sudokuToSolve)
+printSudoku(evilSudoku)
 result = ga(
     sudokuToSolve,
-    populationSize=5000,
+    populationSize=3000,
     numGenerations=10000,
     tournamentSize=5,
-    mutationProbability=0.1,
-    elitismSize=30,
-    restartAfterNGenerationWithoutImprovment=150,
-    randomSeed=1,
+    mutationProbability=0.2,
+    elitismSize=10,
+    restartAfterNGenerationWithoutImprovment=100,
 )
 end = time.perf_counter()
 
