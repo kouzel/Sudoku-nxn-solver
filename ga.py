@@ -56,6 +56,21 @@ class Individual:
         for col in range(N):
             vals = [self.board[row][col] for row in range(N)]
             conflicts += len(vals) - len(set(vals))
+        
+        for row in range(N):
+            for col in range(N):
+                val = self.board[row][col]
+                if val == 0:
+                    continue
+
+                rowVals = [self.board[row][c] for c in range(N)]
+                rowConflict = rowVals.count(val) > 1
+
+                colVals = [self.board[r][col] for r in range(N)]
+                colConflict = colVals.count(val) > 1
+
+                if rowConflict and colConflict:
+                    conflicts += 1
 
         self.fitness = -conflicts
 
@@ -235,16 +250,10 @@ def ga(
 
             crossoverByBlock(parent1, parent2, newPopulation[i], newPopulation[i + 1])
 
-            mutation(
-                newPopulation[i],
-                mutationProbability,
-                initialBoard,
-            )
-            mutation(
-                newPopulation[i + 1],
-                mutationProbability,
-                initialBoard,
-            )
+            customMutationProb = mutationProbability + sameNumOfIterationWithoutImprovment/restartAfterNGenerationWithoutImprovment
+
+            mutation(newPopulation[i],customMutationProb,initialBoard)
+            mutation(newPopulation[i + 1],customMutationProb,initialBoard)
 
             newPopulation[i].calculateFitness()
             newPopulation[i + 1].calculateFitness()
@@ -261,16 +270,16 @@ sudokuToSolve = easySudoku
 Individual.size = len(sudokuToSolve)
 
 start = time.perf_counter()
-
-printSudoku(evilSudoku)
+random.seed(1)
+printSudoku(sudokuToSolve)
 result = ga(
     sudokuToSolve,
-    populationSize=3000,
-    numGenerations=10000,
+    populationSize=500,
+    numGenerations=2000,
     tournamentSize=5,
     mutationProbability=0.2,
-    elitismSize=10,
-    restartAfterNGenerationWithoutImprovment=100,
+    elitismSize=20,
+    restartAfterNGenerationWithoutImprovment=50,
 )
 end = time.perf_counter()
 
